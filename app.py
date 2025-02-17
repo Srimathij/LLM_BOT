@@ -14,12 +14,17 @@ from langdetect import detect
 import torch
 from elevenlabs import ElevenLabs
 
-# Load environment variables
+import os
+from groq import Groq
+
+# Load API key from environment variables (if using .env)
 # load_dotenv()
 groq_api_key = "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"
 
-# Initialize Groq client for Whisper
-client = Groq()
+# Initialize Groq client
+client = Groq(api_key=groq_api_key)
+
+
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
