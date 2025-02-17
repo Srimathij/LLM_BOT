@@ -1,0 +1,11 @@
+streamlit
+torch
+groq
+elevenlabs
+librosa
+soundfile
+speechrecognition
+audio-recorder-streamlit
+streamlit-float
+python-dotenv
+langdetect
