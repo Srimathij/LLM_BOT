@@ -1,0 +1,122 @@
+[
+    {
+        "Hotel_name": "OYO Townhouse 021",
+        "Location": "Coimbatore",
+        "Budget": 3200,
+        "Discount": "20%",
+        "Rating": 4.5,
+        "Amenities": "24/7 Room Service, Free Parking"
+    },
+    {
+        "Hotel_name": "Capital O 12922",
+        "Location": "Chennai",
+        "Budget": 2800,
+        "Discount": "15%",
+        "Rating": 4.2,
+        "Amenities": "Free Wi-Fi, Complimentary Breakfast"
+    },
+    {
+        "Hotel_name": "OYO Flagship 475",
+        "Location": "Bangalore",
+        "Budget": 3500,
+        "Discount": "25%",
+        "Rating": 4.7,
+        "Amenities": "Gym Access, 24/7 Room Service"
+    },
+    {
+        "Hotel_name": "OYO Rooms 12645",
+        "Location": "Hyderabad",
+        "Budget": 3000,
+        "Discount": "18%",
+        "Rating": 4.0,
+        "Amenities": "Swimming Pool, Free Wi-Fi"
+    },
+    {
+        "Hotel_name": "OYO Hotel 2332",
+        "Location": "Delhi",
+        "Budget": 2900,
+        "Discount": "22%",
+        "Rating": 3.9,
+        "Amenities": "Free Breakfast, Parking Available"
+    },
+    {
+        "Hotel_name": "OYO SilverKey 7689",
+        "Location": "Mumbai",
+        "Budget": 4000,
+        "Discount": "30%",
+        "Rating": 4.8,
+        "Amenities": "24/7 Room Service, Free Parking, Complimentary Breakfast"
+    },
+    {
+        "Hotel_name": "OYO Capital O 2541",
+        "Location": "Jaipur",
+        "Budget": 2500,
+        "Discount": "12%",
+        "Rating": 3.8,
+        "Amenities": "Free Wi-Fi, Parking Available"
+    },
+    {
+        "Hotel_name": "OYO Rooms 4983",
+        "Location": "Pune",
+        "Budget": 3100,
+        "Discount": "20%",
+        "Rating": 4.1,
+        "Amenities": "Free Breakfast, Gym Access"
+    },
+    {
+        "Hotel_name": "OYO Townhouse 7810",
+        "Location": "Kolkata",
+        "Budget": 2700,
+        "Discount": "15%",
+        "Rating": 4.3,
+        "Amenities": "Complimentary Breakfast, Free Wi-Fi"
+    },
+    {
+        "Hotel_name": "OYO Flagship 1118",
+        "Location": "Ahmedabad",
+        "Budget": 3300,
+        "Discount": "18%",
+        "Rating": 4.4,
+        "Amenities": "Free Parking, 24/7 Room Service"
+    },
+    {
+        "Hotel_name": "OYO Rooms 785",
+        "Location": "Goa",
+        "Budget": 3600,
+        "Discount": "25%",
+        "Rating": 4.6,
+        "Amenities": "Swimming Pool, Free Breakfast, Free Parking"
+    },
+    {
+        "Hotel_name": "OYO Capital O 965",
+        "Location": "Surat",
+        "Budget": 2950,
+        "Discount": "20%",
+        "Rating": 4.1,
+        "Amenities": "Gym Access, Free Wi-Fi"
+    },
+    {
+        "Hotel_name": "OYO Flagship 2009",
+        "Location": "Lucknow",
+        "Budget": 3100,
+        "Discount": "18%",
+        "Rating": 3.9,
+        "Amenities": "Complimentary Breakfast, Free Parking"
+    },
+    {
+        "Hotel_name": "OYO Townhouse 871",
+        "Location": "Indore",
+        "Budget": 2800,
+        "Discount": "22%",
+        "Rating": 4.2,
+        "Amenities": "24/7 Room Service, Free Wi-Fi"
+    },
+    {
+        "Hotel_name": "OYO Rooms 5589",
+        "Location": "Chandigarh",
+        "Budget": 3200,
+        "Discount": "20%",
+        "Rating": 4.3,
+        "Amenities": "Free Breakfast, Parking Available"
+    }
+]
