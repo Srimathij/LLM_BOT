@@ -1,160 +1,271 @@
-import os
 import streamlit as st
+import os
+import uuid
+import base64
+import json
+import speech_recognition as sr
+from audio_recorder_streamlit import audio_recorder
+from streamlit_float import *
 from dotenv import load_dotenv
-from langdetect import detect, DetectorFactory
-from langchain.callbacks.manager import CallbackManager
-from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-from langchain_community.document_loaders import WebBaseLoader
-from langchain_community.embeddings import GPT4AllEmbeddings
-from langchain_community.vectorstores import Chroma
-from langchain import hub
-from langchain_core.runnables import RunnablePassthrough
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from groq import Groq
-
-# Ensure consistent language detection results
-DetectorFactory.seed = 0
+import librosa
+import soundfile as sf
+from langdetect import detect
+import torch
+from elevenlabs import ElevenLabs
 
 # Load environment variables
 load_dotenv()
 groq_api_key = os.getenv("GROQ_API_KEY")
 
-# Initialize the Groq client
-client = Groq(api_key=groq_api_key)
+# Initialize Groq client for Whisper
+client = Groq()
 
-def get_response(question):
-    # Detect the language of the question
-    lang = detect(question)
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-    # Set the prompt template with clear references to all three source URLs
-    template_en = """
-    You are a dedicated financial data assistant specializing in delivering accurate, concise, and up-to-date information exclusively based on Mirae Asset Mutual Fund's official resources.
+# Initialize Eleven Labs client
+eleven_client = ElevenLabs(
+    api_key="sk_ed58b40c8c793c4107cbbe08f2c706fe2d7aac7dbff6a01a",
+)
 
-    Guidelines for Responses:
-    1. Format: Always structure your answers in a point-wise format with bullet points for clarity and ease of reading.
+# Function to generate speech in Malay or English using Eleven Labs
+
+def text_to_speech(input_text, language='en', voice_id='21m00Tcm4TlvDq8ikWAM'):
+    if language == 'id':
+        voice_id = 'cgSgspJ2msm6clMCkdW9'  # Replace if needed
     
-    2. Focus Areas: Center your responses on:
-    - Fund performance: NAV, historical returns, benchmarks, and risk metrics.
-    - Investment objectives: Fund goals, asset allocation strategies, and target sectors.
-    - Portfolio insights: Sector weightage, top holdings, and portfolio diversification.
-    - Market analysis: Current trends, financial commentary, and Mirae Asset's market stance.
-    - Regulatory updates: Key compliance or policy changes affecting mutual funds.
-    
-    3. Content Restrictions: Ensure all information is:
-    - Directly relevant to Mirae Asset Mutual Fund offerings.
-    - Based on verified, official, and current sources.
-    - Free from references to unrelated financial products, companies, or speculative content.
-    
-    4. Boundary Conditions:
-    - For unrelated queries (not about Mirae Asset Mutual Funds), respond with:
-        "I am designed to provide information solely about Mirae Asset Mutual Fund and its associated products."
-    - Avoid excessive details and keep responses succinct while maintaining value.
+    audio_generator = eleven_client.text_to_speech.convert(
+        voice_id=voice_id,
+        model_id="eleven_multilingual_v2",
+        text=input_text,
+    )
+    audio_file_path = f"{uuid.uuid4()}.mp3"
+    with open(audio_file_path, "wb") as file:
+        for chunk in audio_generator:
+            file.write(chunk)
+    return audio_file_path
 
-    Example Input & Output:
-    Question: What is the recent performance of Mirae Asset's Large Cap Fund?
-    Answer:
-    - NAV: ₹XXX (as of [Date]).
-    - 1-Year Return: X%.
-    - Benchmark Comparison: Outperformed/underperformed by Y%.
-    - Top Sectors: Technology (25%), Financials (20%), etc.
-    - Risk Rating: Moderate (based on official documentation).
+# Function to autoplay audio in Streamlit
+def autoplay_audio(file_path: str):
+    with open(file_path, "rb") as f:
+        data = f.read()
+    b64 = base64.b64encode(data).decode("utf-8")
+    md = f"""
+    <audio autoplay>
+    <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+    </audio>
+    """
+    st.markdown(md, unsafe_allow_html=True)
 
- 
-    Example Question: {question}
- 
-    Answer:
+
+# Preprocess audio function
+def preprocess_audio(audio_path):
+    # Load the audio file using librosa
+    audio, sr = librosa.load(audio_path, sr=16000)
+
+    # Save preprocessed audio to a temporary file
+    temp_audio_path = f"temp_{uuid.uuid4()}.wav"
+    sf.write(temp_audio_path, audio, sr)  # Save using soundfile
+
+    return temp_audio_path
+
+@st.cache_data
+def load_json(file_path):
+    with open(file_path, 'r') as f:
+        data = json.load(f)
+    return data
+
+# Load rooms.json
+json_file_path = "rooms.json"
+rooms_data = load_json(json_file_path)
+
+def search_rooms(location, budget_range):
+    min_budget, max_budget = budget_range
+    results = [room for room in rooms_data if room['Location'].lower() == location.lower() and min_budget <= room['Budget'] <= max_budget]
+    return results
+
+def get_answer(chat_history, user_query, user_location, user_budget):
+    unique_id = uuid.uuid4()
+
+    room_options = ""
+    if user_location and user_budget:
+        matching_rooms = search_rooms(user_location, user_budget)
+        if matching_rooms:
+            rooms_list = "\n".join([f" {room['Hotel_name']} in {room['Location']} (₹{room['Budget']}/night, {room['Amenities']}, Rating: {room['Rating']}⭐, Discount: {room['Discount']})"
+                                    for room in matching_rooms])
+            room_options = f"Here are some hotel options for {user_location} within your budget:\n\n{rooms_list}"
+        else:
+            room_options = f"Sorry, we couldn't find any hotel options in {user_location} within your budget."
+
+    # Set language instruction
+    if detected_language in ['id']:
+        language_instruction = "Respond strictly in **Bahasa Malaysia**."
+    else:
+        language_instruction = "Respond in English."
+
+    prompt_template = f"""
+        ### Chat History:
+        {chat_history}
+
+        ### User Question:
+        {user_query}
+
+        ### Assistant Instructions:
+        You are Telekom Malaysia's official AI assistant. Provide clear, professional, and friendly responses about Telekom Malaysia's services.
+        
+        {language_instruction}
     """
 
-    # Set up callback manager for streaming responses
-    callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
-
-    # Load data from specified URLs
-    urls = ["https://www.miraeassetmf.co.in/"]
-
-    # Collect and split documents for better context retrieval
-    all_data = []
-    for url in urls:
-        loader = WebBaseLoader(url)
-        data = loader.load()
-        all_data.extend(data)
-
-    # Split the data into manageable chunks
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=5000, chunk_overlap=500)
-    all_splits = text_splitter.split_documents(all_data)
-
-    # Embed documents into vector store
-    vectorstore = Chroma.from_documents(documents=all_splits, embedding=GPT4AllEmbeddings())
-
-    # Perform similarity search to get relevant documents based on question
-    docs = vectorstore.similarity_search(question, k=5)
-
-    # Helper function to format document content for model input
-    def format_docs(docs):
-        return "\n\n".join(doc.page_content for doc in docs)
-
-    # Format content from relevant docs
-    websites_content = format_docs(docs)
-
-    # Choose prompt template based on detected language
-    prompt_text = template_en.format(question=question)
-
-    # Call the RAG model with an LLM fine-tuned for retrieval accuracy
-    rag_prompt_llama = hub.pull("rlm/rag-prompt-llama")
-    retriever = vectorstore.as_retriever()
-    qa_chain = (
-        {"context": retriever | format_docs, "question": RunnablePassthrough()}
-        | rag_prompt_llama
-    )
-
-    # Invoke the RAG chain
-    answer = qa_chain.invoke(question)
-
-    # Groq API to post-process and improve the answer quality
     try:
         completion = client.chat.completions.create(
-            model="llama3-70b-8192",
-            messages=[{"role": "user", "content": prompt_text}],
-            temperature=1,  
-            max_tokens=1024,
+            model="llama3-8b-8192",
+            messages=[{"role": "system", "content": prompt_template}],
+            temperature=0.7,
+            max_tokens=2000,
             top_p=1,
-            stream=True,
-            stop=None,
+            stream=False,
         )
 
-        # Capture streamed response
-        response = ""
-        for chunk in completion:
-            response += chunk.choices[0].delta.content or ""
-
-        return response
+        response_text = completion.choices[0].message.content.strip()
+        return response_text
 
     except Exception as e:
-        return f"An error occurred: {e}"
+        print("Error occurred:", e)
+        return "An error occurred while processing your request."
+# Updated speech-to-text function to handle only English and Malay
+def speech_to_text(audio_path):
+    processed_audio_path = preprocess_audio(audio_path)
 
-# Initialize session state for Streamlit
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "Hello and welcome! 🎉 You're in the right place to explore the Mirae asset mutual fund. Just ask your question and let’s dive into the details!"}
-    ]
+    with open(processed_audio_path, "rb") as audio_file:
+        transcription = client.audio.transcriptions.create(
+            file=audio_file,
+            model="whisper-large-v3",
+            response_format="verbose_json",
+        )
 
-# Chat input field at the top
-user_input = st.chat_input("𝖠𝗌𝗄 𝖺𝗇𝗒𝗍𝗁𝗂𝗇𝗀 𝖺𝖻𝗈𝗎𝗍 𝖬𝗂𝗋𝖺𝖾 𝖠𝗌𝗌𝖾𝗍....!💸")
+    recognized_text = transcription.text if hasattr(transcription, 'text') else ""
 
-# Streamlit title
-st.header("𝖬𝖨𝖱𝖠𝖤 𝖠𝖲𝖲𝖤𝖳")
+    if not recognized_text:
+        print("No text recognized.")
+        return "", "unknown"
 
-# Process user input
-if user_input:
-    # Add the user message to chat history
-    st.session_state.messages.append({"role": "user", "content": user_input})
+    try:
+        detected_language = detect(recognized_text)
+        print(f"Detected language: {detected_language}")
+    except Exception as e:
+        print(f"Language detection failed: {e}")
+        detected_language = 'unknown'
 
-    # Get RAG + Groq response
-    response = get_response(user_input)
-    
-    # Add the assistant response to the chat history
-    st.session_state.messages.append({"role": "assistant", "content": response})
+    if detected_language not in ['id', 'ms']:  # Malay: ms
+        print("Unsupported language detected.")
+        return "", "unsupported"
 
-# Display the full chat history
+    print(f"User said: {recognized_text}")
+    return recognized_text, detected_language
+
+float_init()
+
+def initialize_session_state():
+    if "messages" not in st.session_state:
+        st.session_state.messages = [
+            {"role": "assistant", "content": "Hello dan selamat datang ke AI Telekom Malaysia! 🌟 Pembantu peribadi anda ada di sini untuk menjadikan hari anda lebih mudah, lebih pintar dan lebih terhubung. Bagaimana saya boleh membantu anda hari ini?"}
+        ]
+    if "user_query" not in st.session_state:
+        st.session_state.user_query = ""
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+    if "user_location" not in st.session_state:
+        st.session_state.user_location = None
+    if "user_budget" not in st.session_state:
+        st.session_state.user_budget = (0, float("inf"))
+
+initialize_session_state()
+
+# Center the header with refined styles using Streamlit's HTML rendering
+st.markdown("""
+    <style>
+    .header {
+        text-align: center;
+        font-size: 2rem;  /* Medium size header */
+        font-weight: normal;  /* No bold */
+        margin-top: 15px;
+        color: linear-gradient(135deg, #f3ec78, #af4261); /* Gradient for contrast */
+    }
+    .mic-container {
+        position: fixed;
+        bottom: 1rem;
+        right: 1rem;
+    }
+    body {
+        background-color: #000; /* Black background */
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+st.markdown("<div class='header'>VoiceBot.AI✨</div>", unsafe_allow_html=True)
+
+# Create footer container for the microphone
+footer_container = st.container()
+
+# Initialize the user's query to None
+user_query = None
+
+# Handle audio input in the footer container
+with footer_container:
+    transcript = None
+
+    audio_bytes = audio_recorder(
+        text="",
+        recording_color="#e8b62c",
+        neutral_color="#6aa36f",
+        icon_name="microphone-lines",
+        icon_size="3x",
+    )
+
+# Display messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
+
+if audio_bytes:
+    with st.spinner("Hang on! I’m finding the best options for you...⏳"):
+        webm_file_path = "temp_audio.mp3"
+        with open(webm_file_path, "wb") as f:
+            f.write(audio_bytes)
+        transcript, detected_language = speech_to_text(webm_file_path)
+        
+        if transcript:
+            st.session_state.messages.append({"role": "user", "content": transcript})
+            st.session_state.user_query = transcript
+
+            # Detect if user mentioned a location
+            if "in " in transcript.lower():
+                st.session_state.user_location = transcript.split("in ")[-1].strip()
+
+            # Detect if user mentioned a budget range
+            if "between ₹" in transcript.lower():
+                budget_part = transcript.split("between ₹")[-1].split(" and ")
+                min_budget = int(budget_part[0].strip().replace(",", ""))
+                max_budget = int(budget_part[1].strip().replace(",", ""))
+                st.session_state.user_budget = (min_budget, max_budget)
+
+            with st.chat_message("user"):
+                st.write(transcript)
+            os.remove(webm_file_path)
+
+if st.session_state.messages[-1]["role"] != "assistant":
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking🤔..."):
+            if st.session_state.user_query:
+                final_response = get_answer(st.session_state.messages, st.session_state.user_query, st.session_state.user_location, st.session_state.user_budget)
+            else:
+                final_response = get_answer(st.session_state.messages, st.session_state.user_query, st.session_state.user_location, st.session_state.user_budget)
+        with st.spinner("Creating the perfect answer for you...✨"):
+            audio_file = text_to_speech(final_response, language=detected_language)
+            autoplay_audio(audio_file)
+        st.write(final_response)
+        st.session_state.messages.append({"role": "assistant", "content": final_response})
+        os.remove(audio_file)
+
+# Float the footer container
+footer_container.float("bottom: 0rem; right: 10px;")
